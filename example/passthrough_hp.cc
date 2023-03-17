@@ -1179,6 +1179,9 @@ static cxxopts::ParseResult parse_options(int argc, char **argv) {
         ("nocache", "Disable all caching")
         ("nosplice", "Do not use splice(2) to transfer data")
         ("single", "Run single-threaded")
+        ("o", "Mount options", cxxopts::value<std::string>()->default_value(""))
+        ("fsname", "Filesystem name", cxxopts::value<std::string>())
+        ("allow-other", "Permit access by other users")
         ("num-threads", "Number of libfuse worker threads",
                         cxxopts::value<int>()->default_value(SFS_DEFAULT_THREADS))
         ("clone-fd", "use separate fuse device fd for each thread",
@@ -1210,6 +1213,13 @@ static cxxopts::ParseResult parse_options(int argc, char **argv) {
     fs.foreground = options.count("foreground") != 0;
     if (fs.debug || fs.debug_fuse)
         fs.foreground = true;
+
+    auto mnt_opts = options["o"].as<std::string>();
+    if (mnt_opts != "" && mnt_opts != "rw") {
+        std::cout << argv[0] << ": Unsupported mount option(s): " << mnt_opts << "\n";
+        print_usage(argv[0]);
+        exit(2);
+    }
 
     fs.nosplice = options.count("nosplice") != 0;
     fs.num_threads = options["num-threads"].as<int>();
@@ -1245,7 +1255,6 @@ int main(int argc, char *argv[]) {
     // Parse command line options
     auto options {parse_options(argc, argv)};
 
-
     // We need an fd for every dentry in our the filesystem that the
     // kernel knows about. This is way more than most processes need,
     // so try to get rid of any resource softlimit.
@@ -1269,10 +1278,17 @@ int main(int argc, char *argv[]) {
         err(1, "ERROR: open(\"%s\", O_PATH)", fs.source.c_str());
 
     // Initialize fuse
+    std::string fuse_mount_opts = "default_permissions";
+    if (options.count("fsname")) {
+        fuse_mount_opts += ",fsname=" + options["fsname"].as<std::string>();
+    }
+    if (options.count("allow-other")) {
+        fuse_mount_opts += ",allow_other";
+    }
     fuse_args args = FUSE_ARGS_INIT(0, nullptr);
     if (fuse_opt_add_arg(&args, argv[0]) ||
         fuse_opt_add_arg(&args, "-o") ||
-        fuse_opt_add_arg(&args, "default_permissions,fsname=hpps") ||
+        fuse_opt_add_arg(&args, fuse_mount_opts.c_str()) ||
         (fs.debug_fuse && fuse_opt_add_arg(&args, "-odebug")))
         errx(3, "ERROR: Out of memory");
 
