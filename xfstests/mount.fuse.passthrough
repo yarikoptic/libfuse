@@ -19,4 +19,4 @@ else
   source="${TEST_SOURCE}"
 fi
 
-exec "$PASSTHROUGH_PATH" --fsname $dev --allow-other "${source}" "$@"
+exec "$PASSTHROUGH_PATH" -o fsname=$dev,allow_other "${source}" "$@"
